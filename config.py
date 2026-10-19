@@ -1,11 +1,15 @@
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 
 # =====================================================================
 # Paths & Formatting Constants
 # =====================================================================
 
-BASE_DIR = Path(__file__).parent
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 SAVE_FILE = BASE_DIR / "saved_words.txt"
 SETTINGS_FILE = BASE_DIR / "settings.json"
 AI_CACHE_FILE = BASE_DIR / "ai_cache.json"
