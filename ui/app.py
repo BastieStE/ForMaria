@@ -2,7 +2,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
-from config import LANGUAGES, SAVE_FILE, STRINGS, THEMES, ThemePalette
+from config import FONT_SIZES, LANGUAGES, SAVE_FILE, STRINGS, THEMES, ThemePalette
 from storage import (
     load_ai_cache,
     load_archived_words,
@@ -68,6 +68,15 @@ class VocabularyApp:
     @property
     def font_family(self) -> str:
         return self.settings.get("font_family", "Calibri")
+
+    @property
+    def font_size(self) -> str:
+        size_name = self.settings.get("font_size", "Medium")
+        return size_name if size_name in FONT_SIZES else "Medium"
+
+    @property
+    def font_scale(self) -> dict[str, int]:
+        return FONT_SIZES[self.font_size]
 
     @property
     def save_file_path(self) -> str:
@@ -156,6 +165,7 @@ class VocabularyApp:
     def update_settings(self, new_values: dict) -> None:
         old_theme = self.settings.get("theme", "Dark")
         old_font = self.font_family
+        old_font_size = self.font_size
         old_save_path = self.save_file_path
 
         self.settings.update(new_values)
@@ -170,7 +180,7 @@ class VocabularyApp:
             else:
                 save_words_to_file(self.entries, target)
 
-        if self.font_family != old_font:
+        if self.font_family != old_font or self.font_size != old_font_size:
             self.list_view.apply_font()
             self.detail_view.apply_font()
 
@@ -215,8 +225,25 @@ class VocabularyApp:
         self.selected_index = index
         self.selected_from_archive = self.showing_archive
         word, translation = target_list[index]
-        self.detail_view.set_word(word, translation, is_archived=self.selected_from_archive)
+        self.detail_view.set_word(word, translation, is_archived=self.selected_from_archive, parent_word=None)
 
+        self._hide_all_views()
+        self.detail_view.pack(fill=tk.BOTH, expand=True)
+
+    def show_subword_view(self, parent_index: int, sub_word: str, sub_translation: str) -> None:
+        target_list = self.archived_entries if self.showing_archive else self.entries
+        if not (0 <= parent_index < len(target_list)):
+            return
+        self.current_view = "detail"
+        self.selected_index = parent_index
+        self.selected_from_archive = self.showing_archive
+        parent_word = target_list[parent_index][0]
+        self.detail_view.set_word(
+            sub_word,
+            sub_translation,
+            is_archived=self.selected_from_archive,
+            parent_word=parent_word,
+        )
         self._hide_all_views()
         self.detail_view.pack(fill=tk.BOTH, expand=True)
 
@@ -230,16 +257,26 @@ class VocabularyApp:
     # Word List, Archive & Reorder Operations
     # -----------------------------------------------------------------
 
-    def _on_hotkey_captured_text(self, cleaned_text: str) -> None:
+    def _on_hotkey_captured_text(self, captured_text: str) -> None:
         target_lang_name = self.settings.get("target_language", "French")
         lang_code = LANGUAGES.get(target_lang_name, "fr")
         provider = self.settings.get("translation_source", "Google Translate")
-        bkrs_examples = ""
-        if provider == "BKRS (bkrs.info)":
-            translation, bkrs_examples = translate_and_examples_with_bkrs(cleaned_text)
-        else:
-            translation = translate_text(cleaned_text, lang_code, provider=provider)
-        self.root.after(0, self.add_entry, cleaned_text, translation, bkrs_examples)
+
+        raw_lines = [
+            " ".join(line.split())
+            for line in captured_text.splitlines()
+        ]
+        words_to_add = [w for w in raw_lines if w]
+        if not words_to_add:
+            return
+
+        for word in words_to_add:
+            bkrs_examples = ""
+            if provider == "BKRS (bkrs.info)":
+                translation, bkrs_examples = translate_and_examples_with_bkrs(word)
+            else:
+                translation = translate_text(word, lang_code, provider=provider)
+            self.root.after(0, self.add_entry, word, translation, bkrs_examples)
 
     def add_entry(self, word: str, translation: str, bkrs_examples: str = "") -> None:
         """Add or update a word in the active list and .txt file."""
@@ -350,6 +387,25 @@ class VocabularyApp:
         if self.selected_index is not None:
             idx = self.selected_index
             from_archive = self.selected_from_archive
+            parent_w = getattr(self.detail_view, "parent_word", None)
+            target_list = self.archived_entries if from_archive else self.entries
+            if parent_w and 0 <= idx < len(target_list) and target_list[idx][0] == parent_w:
+                sub_w = self.detail_view.current_word
+                parent_word, full_trans = target_list[idx]
+                lines = [l for l in full_trans.splitlines() if l.strip()]
+                remaining = [l for l in lines if not l.strip().startswith(sub_w)]
+                if not remaining:
+                    self.show_list_view()
+                    self.delete_entry(idx, from_archive=from_archive)
+                else:
+                    target_list[idx] = (parent_word, "\n".join(remaining))
+                    if from_archive:
+                        save_archived_words(self.archived_entries)
+                    else:
+                        save_words_to_file(self.entries, self.save_file_path)
+                    self.show_list_view()
+                return
+
             self.show_list_view()
             self.delete_entry(idx, from_archive=from_archive)
 

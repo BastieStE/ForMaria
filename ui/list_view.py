@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from storage import parse_sub_words
+
 if TYPE_CHECKING:
     from ui.app import VocabularyApp
 
@@ -13,8 +15,10 @@ class WordListView(tk.Frame):
         self.search_var = tk.StringVar()
         self.search_placeholder_active: bool = True
         self._dragged_card: tk.Frame | None = None
+        self._pressed_card: tk.Frame | None = None
         self._press_y: int = 0
         self._did_drag: bool = False
+        self.expanded_words: set[str] = set()
         self.row_cards: list[tk.Frame] = []
         self._build()
 
@@ -478,8 +482,20 @@ class WordListView(tk.Frame):
     ) -> None:
         t = self.app.theme
         font_family = self.app.font_family
+
+        sub_words = parse_sub_words(translation)
+        has_sub_words = len(sub_words) > 1
+        is_expanded = word in self.expanded_words
+
+        block_container = tk.Frame(self.rows_frame, bg=t.BG_MAIN)
+        block_container.pack(fill=tk.X, pady=4)
+        block_container.real_index = index  # type: ignore[attr-defined]
+        block_container.btn_up = None  # type: ignore[attr-defined]
+        block_container.btn_down = None  # type: ignore[attr-defined]
+        self.row_cards.append(block_container)
+
         card = tk.Frame(
-            self.rows_frame,
+            block_container,
             bg=t.BG_CARD,
             highlightbackground=t.BORDER,
             highlightthickness=1,
@@ -487,11 +503,8 @@ class WordListView(tk.Frame):
             pady=10,
             cursor="hand2",
         )
-        card.pack(fill=tk.X, pady=4)
-        card.real_index = index  # type: ignore[attr-defined]
-        card.btn_up = None  # type: ignore[attr-defined]
-        card.btn_down = None  # type: ignore[attr-defined]
-        self.row_cards.append(card)
+        card.pack(fill=tk.X)
+        block_container.card = card  # type: ignore[attr-defined]
 
         hover_widgets: list[tk.Widget] = []
         hover_buttons: list[tk.Button] = []
@@ -508,9 +521,9 @@ class WordListView(tk.Frame):
                 cursor="fleur",
             )
             grip_lbl.pack(side=tk.LEFT)
-            grip_lbl.bind("<ButtonPress-1>", lambda e, c=card: self._on_block_press(e, c, immediate_drag=True))
+            grip_lbl.bind("<ButtonPress-1>", lambda e, c=block_container: self._on_block_press(e, c, immediate_drag=True))
             grip_lbl.bind("<B1-Motion>", self._on_block_motion)
-            grip_lbl.bind("<ButtonRelease-1>", self._on_block_release)
+            grip_lbl.bind("<ButtonRelease-1>", lambda e, c=block_container: self._on_block_release(e, c))
             hover_widgets.append(grip_lbl)
 
             order_box = tk.Frame(card, bg=t.BG_CARD)
@@ -531,10 +544,10 @@ class WordListView(tk.Frame):
                 pady=0,
                 cursor="arrow" if index == 0 else "hand2",
                 state=tk.DISABLED if index == 0 else tk.NORMAL,
-                command=lambda c=card: self.app.move_entry(c.real_index, c.real_index - 1),
+                command=lambda c=block_container: self.app.move_entry(c.real_index, c.real_index - 1),
             )
             btn_up.pack(side=tk.TOP)
-            card.btn_up = btn_up  # type: ignore[attr-defined]
+            block_container.btn_up = btn_up  # type: ignore[attr-defined]
             hover_buttons.append(btn_up)
 
             btn_down = tk.Button(
@@ -551,49 +564,40 @@ class WordListView(tk.Frame):
                 pady=0,
                 cursor="arrow" if index >= total_len - 1 else "hand2",
                 state=tk.DISABLED if index >= total_len - 1 else tk.NORMAL,
-                command=lambda c=card: self.app.move_entry(c.real_index, c.real_index + 1),
+                command=lambda c=block_container: self.app.move_entry(c.real_index, c.real_index + 1),
             )
             btn_down.pack(side=tk.BOTTOM)
-            card.btn_down = btn_down  # type: ignore[attr-defined]
+            block_container.btn_down = btn_down  # type: ignore[attr-defined]
             hover_buttons.append(btn_down)
+
+        scale = self.app.font_scale
+        word_sz = scale.get("list_word", 12)
+        trans_sz = scale.get("list_trans", 11)
 
         word_lbl = tk.Label(
             card,
             text=word,
-            font=(font_family, 12, "bold"),
+            font=(font_family, word_sz, "bold"),
             fg=t.FG_WORD,
             bg=t.BG_CARD,
             anchor="w",
             justify=tk.LEFT,
-            wraplength=170,
             cursor="hand2",
         )
-        word_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        word_lbl.pack(side=tk.LEFT)
 
         arrow_lbl = tk.Label(
             card,
             text="→",
-            font=("Segoe UI", 11),
+            font=("Segoe UI", max(9, word_sz - 2)),
             fg=t.FG_SUBTLE,
             bg=t.BG_CARD,
-            padx=10,
+            padx=8,
             cursor="hand2",
         )
         arrow_lbl.pack(side=tk.LEFT)
 
-        trans_lbl = tk.Label(
-            card,
-            text=translation,
-            font=(font_family, 12),
-            fg=t.FG_TRANSLATION,
-            bg=t.BG_CARD,
-            anchor="w",
-            justify=tk.LEFT,
-            wraplength=195,
-            cursor="hand2",
-        )
-        trans_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
+        # --- Right Side Actions (packed before trans_lbl so middle expands cleanly) ---
         del_btn = tk.Button(
             card,
             text="✕",
@@ -607,7 +611,7 @@ class WordListView(tk.Frame):
             cursor="hand2",
             padx=6,
             pady=2,
-            command=lambda c=card: self.app.delete_entry(c.real_index),
+            command=lambda c=block_container: self.app.delete_entry(c.real_index),
         )
         del_btn.pack(side=tk.RIGHT, padx=(2, 0))
         hover_buttons.append(del_btn)
@@ -625,7 +629,7 @@ class WordListView(tk.Frame):
             cursor="hand2",
             padx=6,
             pady=2,
-            command=lambda c=card: (
+            command=lambda c=block_container: (
                 self.app.unarchive_entry(c.real_index)
                 if self.app.showing_archive
                 else self.app.archive_entry(c.real_index)
@@ -634,38 +638,240 @@ class WordListView(tk.Frame):
         arch_btn.pack(side=tk.RIGHT, padx=(4, 0))
         hover_buttons.append(arch_btn)
 
-        chevron_lbl = tk.Label(
-            card,
-            text="›",
-            font=("Segoe UI", 13),
-            fg=t.FG_SUBTLE,
-            bg=t.BG_CARD,
-            padx=4,
-            cursor="hand2",
-        )
-        chevron_lbl.pack(side=tk.RIGHT)
+        btn_dropdown: tk.Button | None = None
+        chevron_lbl: tk.Label | None = None
 
-        clickable_widgets = (word_lbl, arrow_lbl, trans_lbl, chevron_lbl)
+        if has_sub_words:
+            dropdown_frame = tk.Frame(block_container, bg=t.BG_MAIN)
+            block_container.dropdown_frame = dropdown_frame  # type: ignore[attr-defined]
+
+            btn_dropdown = tk.Button(
+                card,
+                text="▲" if is_expanded else "▼",
+                font=("Segoe UI", 16, "bold"),
+                fg=t.ACCENT if is_expanded else t.FG_WORD,
+                bg=t.BG_CARD,
+                activebackground=t.ACCENT_SOFT,
+                activeforeground=t.ACCENT,
+                relief=tk.FLAT,
+                bd=0,
+                cursor="hand2",
+                padx=8,
+                pady=0,
+            )
+            btn_dropdown.pack(side=tk.RIGHT, padx=(4, 0))
+            hover_buttons.append(btn_dropdown)
+
+            def _toggle(w=word, df=dropdown_frame, btn=btn_dropdown):
+                if w in self.expanded_words:
+                    self.expanded_words.remove(w)
+                    df.pack_forget()
+                    btn.configure(text="▼", fg=t.FG_WORD)
+                else:
+                    self.expanded_words.add(w)
+                    df.pack(fill=tk.X, pady=(2, 6))
+                    btn.configure(text="▲", fg=t.ACCENT)
+                self.app.root.update_idletasks()
+                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+                self._update_scrollbar_visibility()
+
+            btn_dropdown.configure(command=_toggle)
+        else:
+            chevron_lbl = tk.Label(
+                card,
+                text="›",
+                font=("Segoe UI", 13),
+                fg=t.FG_SUBTLE,
+                bg=t.BG_CARD,
+                padx=4,
+                cursor="hand2",
+            )
+            chevron_lbl.pack(side=tk.RIGHT)
+
+        # Initial wrap calculation based on canvas width
+        canvas_w = self.canvas.winfo_width()
+        fixed_right = 115 if has_sub_words else 95
+        fixed_left = (word_sz * len(word)) + (65 if can_reorder else 45)
+        init_avail = max(150, (canvas_w if canvas_w > 200 else 600) - fixed_left - fixed_right)
+
+        if has_sub_words:
+            sub_names = " • ".join(w for w, _ in sub_words)
+            summary = self.app.t("subwords_count").format(n=len(sub_words), words=sub_names)
+            trans_lbl = tk.Label(
+                card,
+                text=summary,
+                font=(font_family, trans_sz, "italic"),
+                fg=t.ACCENT,
+                bg=t.BG_CARD,
+                anchor="w",
+                justify=tk.LEFT,
+                wraplength=init_avail,
+                cursor="hand2",
+            )
+        else:
+            display_translation = (
+                "; ".join(
+                    p.strip()
+                    for line in translation.splitlines()
+                    for p in line.split("|")
+                    if p.strip()
+                )
+                or translation
+            )
+            trans_lbl = tk.Label(
+                card,
+                text=display_translation,
+                font=(font_family, trans_sz),
+                fg=t.FG_TRANSLATION,
+                bg=t.BG_CARD,
+                anchor="w",
+                justify=tk.LEFT,
+                wraplength=init_avail,
+                cursor="hand2",
+            )
+        trans_lbl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+
+        def _on_card_configure(event, c=card, lbl=trans_lbl, wlbl=word_lbl):
+            if event.widget != c:
+                return
+            fr = 115 if has_sub_words else 95
+            fl = wlbl.winfo_reqwidth() + (65 if can_reorder else 45)
+            avail = max(150, event.width - fl - fr)
+            if abs(lbl.cget("wraplength") - avail) > 8:
+                lbl.configure(wraplength=avail)
+
+        card.bind("<Configure>", _on_card_configure)
+
+        clickable_widgets = [word_lbl, arrow_lbl, trans_lbl]
+        if chevron_lbl is not None:
+            clickable_widgets.append(chevron_lbl)
+
+        if has_sub_words:
+            for sw, st in sub_words:
+                sub_card = tk.Frame(
+                    dropdown_frame,
+                    bg=t.BG_CARD,
+                    highlightbackground=t.BORDER,
+                    highlightthickness=1,
+                    padx=14,
+                    pady=8,
+                    cursor="hand2",
+                )
+                sub_card.pack(fill=tk.X, padx=(22, 0), pady=2)
+
+                sub_widgets: list[tk.Widget] = []
+
+                sub_branch = tk.Label(
+                    sub_card,
+                    text="↳",
+                    font=("Segoe UI", max(10, word_sz - 1), "bold"),
+                    fg=t.ACCENT,
+                    bg=t.BG_CARD,
+                )
+                sub_branch.pack(side=tk.LEFT, padx=(0, 6))
+                sub_widgets.append(sub_branch)
+
+                sub_w_lbl = tk.Label(
+                    sub_card,
+                    text=sw,
+                    font=(font_family, max(10, word_sz - 1), "bold"),
+                    fg=t.FG_WORD,
+                    bg=t.BG_CARD,
+                    anchor="w",
+                    justify=tk.LEFT,
+                    cursor="hand2",
+                )
+                sub_w_lbl.pack(side=tk.LEFT)
+                sub_widgets.append(sub_w_lbl)
+
+                sub_arrow = tk.Label(
+                    sub_card,
+                    text="→",
+                    font=("Segoe UI", max(9, word_sz - 3)),
+                    fg=t.FG_SUBTLE,
+                    bg=t.BG_CARD,
+                    padx=8,
+                    cursor="hand2",
+                )
+                sub_arrow.pack(side=tk.LEFT)
+                sub_widgets.append(sub_arrow)
+
+                sub_chev = tk.Label(
+                    sub_card,
+                    text="›",
+                    font=("Segoe UI", 12),
+                    fg=t.FG_SUBTLE,
+                    bg=t.BG_CARD,
+                    padx=4,
+                    cursor="hand2",
+                )
+                sub_chev.pack(side=tk.RIGHT)
+                sub_widgets.append(sub_chev)
+
+                sub_init_avail = max(120, (canvas_w if canvas_w > 200 else 580) - (word_sz * len(sw)) - 100)
+                sub_t_lbl = tk.Label(
+                    sub_card,
+                    text=st,
+                    font=(font_family, max(10, trans_sz - 1)),
+                    fg=t.FG_TRANSLATION,
+                    bg=t.BG_CARD,
+                    anchor="w",
+                    justify=tk.LEFT,
+                    wraplength=sub_init_avail,
+                    cursor="hand2",
+                )
+                sub_t_lbl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+                sub_widgets.append(sub_t_lbl)
+
+                def _on_subcard_configure(event, sc=sub_card, lbl=sub_t_lbl, wlbl=sub_w_lbl):
+                    if event.widget != sc:
+                        return
+                    fl = wlbl.winfo_reqwidth() + 60
+                    avail = max(120, event.width - fl - 35)
+                    if abs(lbl.cget("wraplength") - avail) > 8:
+                        lbl.configure(wraplength=avail)
+
+                sub_card.bind("<Configure>", _on_subcard_configure)
+
+                sub_card.sub_widgets = tuple(sub_widgets)  # type: ignore[attr-defined]
+
+                for w_item in (sub_card, *sub_widgets):
+                    w_item.bind(
+                        "<Enter>",
+                        lambda _e, sc=sub_card: self._apply_subcard_surface(sc, True),
+                    )
+                    w_item.bind(
+                        "<Leave>",
+                        lambda _e, sc=sub_card: self._apply_subcard_surface(sc, False),
+                    )
+                    w_item.bind(
+                        "<ButtonRelease-1>",
+                        lambda _e, p_idx=index, cw=sw, ct=st: self.app.show_subword_view(p_idx, cw, ct),
+                    )
+
+            if is_expanded:
+                dropdown_frame.pack(fill=tk.X, pady=(2, 6))
+
         hover_widgets.extend(clickable_widgets)
-        card.hover_widgets = tuple(hover_widgets)  # type: ignore[attr-defined]
-        card.hover_buttons = tuple(hover_buttons)  # type: ignore[attr-defined]
+        block_container.hover_widgets = tuple(hover_widgets)  # type: ignore[attr-defined]
+        block_container.hover_buttons = tuple(hover_buttons)  # type: ignore[attr-defined]
 
         for widget in (card, *clickable_widgets):
             widget.bind(
                 "<ButtonPress-1>",
-                lambda e, c=card, ro=can_reorder: self._on_block_press(e, c, immediate_drag=False, can_reorder=ro),
+                lambda e, c=block_container, ro=can_reorder: self._on_block_press(e, c, immediate_drag=False, can_reorder=ro),
             )
             widget.bind("<B1-Motion>", self._on_block_motion)
-            widget.bind("<ButtonRelease-1>", self._on_block_release)
+            widget.bind("<ButtonRelease-1>", lambda e, c=block_container: self._on_block_release(e, c))
 
         for widget in (card, *hover_widgets, *hover_buttons):
             widget.bind(
                 "<Enter>",
-                lambda _e, c=card: self._on_card_hover(c, True),
+                lambda _e, c=block_container: self._on_card_hover(c, True),
             )
             widget.bind(
                 "<Leave>",
-                lambda _e, c=card: self._on_card_hover(c, False),
+                lambda _e, c=block_container: self._on_card_hover(c, False),
             )
 
     # --- In-Place Block Movement & Smooth Drag-and-Drop ---
@@ -715,8 +921,9 @@ class WordListView(tk.Frame):
     def _on_block_press(
         self, event, card: tk.Frame, immediate_drag: bool = False, can_reorder: bool = True
     ) -> None:
+        self._pressed_card = card
         self._press_y = event.y_root
-        self._did_drag = immediate_drag
+        self._did_drag = immediate_drag and can_reorder
         if can_reorder:
             self._dragged_card = card
             if immediate_drag:
@@ -730,7 +937,7 @@ class WordListView(tk.Frame):
             return
 
         if not self._did_drag:
-            if abs(event.y_root - self._press_y) < 6:
+            if abs(event.y_root - self._press_y) < 8:
                 return
             self._did_drag = True
             self._apply_card_surface(card, hovered=True, dragging=True)
@@ -759,36 +966,51 @@ class WordListView(tk.Frame):
                     self.app.move_entry(cur_idx, cur_idx + 1, save=False, update_ui_blocks=True)
                     return
 
-    def _on_block_release(self, _event) -> None:
-        card = self._dragged_card
+    def _on_block_release(self, _event, clicked_card: tk.Frame | None = None) -> None:
+        drag_card = self._dragged_card
+        press_card = self._pressed_card or clicked_card
         was_drag = self._did_drag
         self._dragged_card = None
+        self._pressed_card = None
         self._did_drag = False
 
         if was_drag:
-            if card is not None and card.winfo_exists():
-                self._apply_card_surface(card, hovered=True, dragging=False)
+            if drag_card is not None and drag_card.winfo_exists():
+                self._apply_card_surface(drag_card, hovered=True, dragging=False)
             self.app.persist_current_list_order()
-        elif card is not None and card.winfo_exists():
-            self.app.show_word_view(getattr(card, "real_index", 0))
+        elif press_card is not None and press_card.winfo_exists():
+            self.app.show_word_view(getattr(press_card, "real_index", 0))
 
-    def _on_card_hover(self, card: tk.Frame, hovered: bool) -> None:
+    def _on_card_hover(self, card_or_container: tk.Frame, hovered: bool) -> None:
         if self._dragged_card is not None:
             return
-        self._apply_card_surface(card, hovered=hovered, dragging=False)
+        self._apply_card_surface(card_or_container, hovered=hovered, dragging=False)
 
-    def _apply_card_surface(self, card: tk.Frame, hovered: bool, dragging: bool) -> None:
+    def _apply_card_surface(self, target: tk.Frame, hovered: bool, dragging: bool) -> None:
+        if not target.winfo_exists():
+            return
+        card = getattr(target, "card", target)
         if not card.winfo_exists():
             return
         t = self.app.theme
         bg = t.BG_CARD_HOVER if (hovered or dragging) else t.BG_CARD
         border = t.ACCENT if dragging else (t.BORDER_HOVER if hovered else t.BORDER)
         card.configure(bg=bg, highlightbackground=border)
-        for w in getattr(card, "hover_widgets", ()):
+        for w in getattr(target, "hover_widgets", getattr(card, "hover_widgets", ())):
             if w.winfo_exists():
                 w.configure(bg=bg)
-        for b in getattr(card, "hover_buttons", ()):
+        for b in getattr(target, "hover_buttons", getattr(card, "hover_buttons", ())):
             if b.winfo_exists():
                 b.configure(bg=bg)
 
+    def _apply_subcard_surface(self, sub_card: tk.Frame, hovered: bool) -> None:
+        if not sub_card.winfo_exists():
+            return
+        t = self.app.theme
+        bg = t.BG_CARD_HOVER if hovered else t.BG_CARD
+        border = t.ACCENT if hovered else t.BORDER
+        sub_card.configure(bg=bg, highlightbackground=border)
+        for w in getattr(sub_card, "sub_widgets", ()):
+            if w.winfo_exists():
+                w.configure(bg=bg)
 

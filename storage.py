@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 from config import (
     AI_CACHE_FILE,
     ARCHIVED_FILE,
@@ -42,6 +43,55 @@ def resolve_save_file(file_path: str | Path | None = None) -> Path:
     return Path(custom) if custom else SAVE_FILE
 
 
+def _normalize_translation(translation: str) -> str:
+    """Ensure multi-part translations are always separated line-by-line instead of using '|'."""
+    raw = str(translation).replace("\r\n", "\n")
+    lines: list[str] = []
+    for line in raw.split("\n"):
+        if "|" in line:
+            for part in line.split("|"):
+                cleaned = part.strip()
+                if cleaned:
+                    lines.append(cleaned)
+        else:
+            cleaned = line.strip()
+            if cleaned:
+                lines.append(cleaned)
+    return "\n".join(lines) if lines else raw.strip()
+
+
+def parse_sub_words(translation: str) -> list[tuple[str, str]]:
+    """Parse segmented multi-word definitions into independent (word, translation) pairs."""
+    raw = str(translation).replace("\r\n", "\n")
+    lines = [l.strip() for l in raw.split("\n") if l.strip()]
+    if len(lines) <= 1:
+        if lines and "|" in lines[0]:
+            parts = [p.strip() for p in lines[0].split("|") if p.strip()]
+            if len(parts) > 1:
+                lines = parts
+            else:
+                return []
+        else:
+            return []
+
+    subs: list[tuple[str, str]] = []
+    for line in lines:
+        m = re.match(r"^(\S+?)\s+(\[.*?\]\s*.*)$", line)
+        if m:
+            subs.append((m.group(1).strip(), m.group(2).strip()))
+            continue
+        m = re.match(r"^([^:➔]+?)\s*[:➔]\s*(.*)$", line)
+        if m:
+            subs.append((m.group(1).strip(), m.group(2).strip()))
+            continue
+        parts = line.split(None, 1)
+        if len(parts) == 2:
+            subs.append((parts[0].strip(), parts[1].strip()))
+        else:
+            subs.append((line.strip(), ""))
+    return subs
+
+
 def format_words_for_file(entries: list[tuple[str, str]]) -> str:
     """Format the vocabulary list into a clean, human-readable .txt file."""
     if not entries:
@@ -54,7 +104,16 @@ def format_words_for_file(entries: list[tuple[str, str]]) -> str:
         "",
     ]
     for word, translation in entries:
-        lines.append(f"  • {word}  ➔  {translation}")
+        normalized = _normalize_translation(translation)
+        trans_lines = [t.strip() for t in normalized.splitlines() if t.strip()]
+        if not trans_lines:
+            lines.append(f"  • {word}  ➔  ")
+        elif len(trans_lines) == 1:
+            lines.append(f"  • {word}  ➔  {trans_lines[0]}")
+        else:
+            lines.append(f"  • {word}  ➔  ")
+            for sub_line in trans_lines:
+                lines.append(f"      {sub_line}")
 
     return "\n".join(lines) + "\n"
 
@@ -68,11 +127,21 @@ def load_saved_words(file_path: str | Path | None = None) -> list[tuple[str, str
     try:
         for line in target.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped == HEADER_LINE or stripped.startswith("WORDS TO LEARN") or stripped == "No words saved yet.":
+                continue
             if stripped.startswith("•") and "➔" in stripped:
                 left, right = stripped[1:].split("➔", 1)
-                word, translation = left.strip(), right.strip()
+                word = left.strip()
+                translation = _normalize_translation(right.strip())
                 if word:
                     entries.append((word, translation))
+            elif entries:
+                prev_word, prev_trans = entries[-1]
+                extra = _normalize_translation(stripped)
+                if extra:
+                    entries[-1] = (prev_word, f"{prev_trans}\n{extra}" if prev_trans else extra)
     except Exception:
         pass
     return entries
@@ -98,7 +167,7 @@ def load_archived_words() -> list[tuple[str, str]]:
         data = json.loads(ARCHIVED_FILE.read_text(encoding="utf-8"))
         if isinstance(data, list):
             return [
-                (str(item[0]), str(item[1]))
+                (str(item[0]), _normalize_translation(str(item[1])))
                 for item in data
                 if isinstance(item, (list, tuple)) and len(item) >= 2 and str(item[0]).strip()
             ]

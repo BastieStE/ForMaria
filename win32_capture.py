@@ -272,10 +272,8 @@ class HotkeyListener:
                     current_vk = self._register()
                 elif msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
                     raw_text = capture_selected_text(current_vk)
-                    if raw_text:
-                        cleaned = " ".join(raw_text.split())
-                        if cleaned:
-                            self.on_text_captured(cleaned)
+                    if raw_text and raw_text.strip():
+                        self.on_text_captured(raw_text.strip())
         finally:
             user32.UnregisterHotKey(None, HOTKEY_ID)
 

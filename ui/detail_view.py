@@ -19,6 +19,7 @@ class WordDetailView(tk.Frame):
         self.current_word: str = ""
         self.current_translation: str = ""
         self.is_archived: bool = False
+        self.parent_word: str | None = None
         self.active_tool: str | None = None
         self._pending_show_cb: Callable[[], None] | None = None
         self._pending_gen_cb: Callable[[], None] | None = None
@@ -145,6 +146,13 @@ class WordDetailView(tk.Frame):
             wraplength=520,
         )
         self.translation_label.pack(fill=tk.X, pady=(2, 0))
+
+        def _on_hero_configure(e):
+            avail = max(e.width - 44, 250)
+            self.word_label.configure(wraplength=avail)
+            self.translation_label.configure(wraplength=avail)
+
+        self.hero_card.bind("<Configure>", _on_hero_configure)
 
         # --- AI & BKRS Tools Section (Active Buttons) ---
         self.lbl_ai_tools_header = tk.Label(
@@ -331,39 +339,61 @@ class WordDetailView(tk.Frame):
     def _configure_text_tags(self) -> None:
         t = self.app.theme
         font_family = self.app.font_family
-        self.ai_text.tag_configure("heading", font=(font_family, 11, "bold"), foreground=t.ACCENT)
-        self.ai_text.tag_configure("bold", font=(font_family, 10, "bold"), foreground=t.FG_WORD)
-        self.ai_text.tag_configure("subtle", font=(font_family, 10), foreground=t.FG_SUBTLE)
+        scale = self.app.font_scale
+        self.ai_text.tag_configure("heading", font=(font_family, scale["ai_heading"], "bold"), foreground=t.ACCENT)
+        self.ai_text.tag_configure("bold", font=(font_family, scale["ai_text"], "bold"), foreground=t.FG_WORD)
+        self.ai_text.tag_configure("subtle", font=(font_family, scale["ai_text"]), foreground=t.FG_SUBTLE)
 
     def apply_font(self) -> None:
         font_family = self.app.font_family
-        self.word_label.configure(font=(font_family, 18, "bold"))
-        self.translation_label.configure(font=(font_family, 13))
-        self.entry_question.configure(font=(font_family, 10))
-        self.ai_text.configure(font=(font_family, 10))
+        scale = self.app.font_scale
+        self.word_label.configure(font=(font_family, scale["detail_title"], "bold"))
+        self.translation_label.configure(font=(font_family, scale["detail_trans"]))
+        self.entry_question.configure(font=(font_family, scale["ai_text"]))
+        self.ai_text.configure(font=(font_family, scale["ai_text"]))
         self._configure_text_tags()
 
     @staticmethod
     def _format_translation_list(translation: str) -> str:
-        """If translation contains '|' segments, format them as a vertical list one above the other."""
-        if "|" in translation:
-            parts = [p.strip() for p in translation.split("|") if p.strip()]
-            if len(parts) > 1:
-                return "\n".join(f"•  {p}" for p in parts)
-        return translation
+        """If translation contains multiple lines or '|' segments, format them as a vertical list."""
+        parts: list[str] = []
+        for line in translation.splitlines():
+            for seg in line.split("|"):
+                cleaned = seg.strip()
+                if cleaned:
+                    parts.append(cleaned)
+        if len(parts) > 1:
+            return "\n".join(p if p.startswith("•") else f"•  {p}" for p in parts)
+        return parts[0] if parts else translation
 
-    def set_word(self, word: str, translation: str, is_archived: bool = False) -> None:
+    def set_word(
+        self,
+        word: str,
+        translation: str,
+        is_archived: bool = False,
+        parent_word: str | None = None,
+    ) -> None:
         self.current_word = word
         self.current_translation = translation
         self.is_archived = is_archived
+        self.parent_word = parent_word
         self.active_tool = None
         self.word_label.configure(text=word)
         self.translation_label.configure(text=self._format_translation_list(translation))
+        self._update_orig_tag()
         self._update_archive_btn_label()
         self.choice_bar.pack_forget()
         self.ask_bar.pack_forget()
         self._update_button_highlights()
         self._set_ai_output(self.app.t("ai_placeholder"), is_subtle=True)
+
+    def _update_orig_tag(self) -> None:
+        base = self.app.t("lbl_original")
+        if self.parent_word:
+            hint = self.app.t("subwords_from").format(parent=self.parent_word)
+            self.lbl_orig_tag.configure(text=f"{base} ({hint})")
+        else:
+            self.lbl_orig_tag.configure(text=base)
 
     def _update_archive_btn_label(self) -> None:
         key = "unarchive_word" if self.is_archived else "archive_word"
@@ -625,7 +655,7 @@ class WordDetailView(tk.Frame):
         self.btn_back.configure(text=self.app.t("back_to_list"))
         self._update_archive_btn_label()
         self.btn_remove.configure(text=self.app.t("remove_word"))
-        self.lbl_orig_tag.configure(text=self.app.t("lbl_original"))
+        self._update_orig_tag()
         self.lbl_trans_tag.configure(text=self.app.t("lbl_translated"))
         self.lbl_ai_tools_header.configure(text=self.app.t("ai_tools_header"))
         self.lbl_choice_prompt.configure(text=self.app.t("ai_cached_prompt"))

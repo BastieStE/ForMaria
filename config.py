@@ -32,6 +32,48 @@ FONT_OPTIONS: list[str] = [
     "Consolas",
 ]
 
+FONT_SIZE_OPTIONS: list[str] = [
+    "Small",
+    "Medium",
+    "Large",
+    "Extra Large",
+]
+
+FONT_SIZES: dict[str, dict[str, int]] = {
+    "Small": {
+        "list_word": 12,
+        "list_trans": 12,
+        "detail_title": 18,
+        "detail_trans": 13,
+        "ai_text": 10,
+        "ai_heading": 11,
+    },
+    "Medium": {
+        "list_word": 14,
+        "list_trans": 14,
+        "detail_title": 21,
+        "detail_trans": 15,
+        "ai_text": 12,
+        "ai_heading": 13,
+    },
+    "Large": {
+        "list_word": 16,
+        "list_trans": 16,
+        "detail_title": 24,
+        "detail_trans": 17,
+        "ai_text": 14,
+        "ai_heading": 15,
+    },
+    "Extra Large": {
+            "list_word": 20,
+            "list_trans": 20,
+            "detail_title": 28,
+            "detail_trans": 21,
+            "ai_text": 18,
+            "ai_heading": 19,
+        },
+}
+
 # =====================================================================
 # Hotkey & Language Options
 # =====================================================================
@@ -87,6 +129,7 @@ DEFAULT_SETTINGS: dict = {
     "hotkey": "Ctrl + Q",
     "theme": "Dark",
     "font_family": "Calibri",
+    "font_size": "Medium",
     "save_file_path": str(SAVE_FILE),
     "always_on_top": False,
     "ai_provider": "Google Gemini",
@@ -200,6 +243,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "archive_word": "📥 Archive",
         "unarchive_word": "↩ Restore",
         "remove_word": "Delete",
+        "subwords_from": "from {parent}",
+        "subwords_count": "{n} words: {words}",
         "lbl_original": "ORIGINAL",
         "lbl_translated": "TRANSLATION",
         "ai_tools_header": "AI & DICTIONARY TOOLS",
@@ -222,6 +267,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "lbl_theme": "Appearance Theme",
         "lbl_app_lang": "Interface Language",
         "lbl_font": "Text Font",
+        "lbl_font_size": "Text Size",
         "lbl_trans_source": "Translation Source",
         "lbl_target_lang": "Target Language (Google)",
         "lbl_hotkey": "Capture Shortcut",
@@ -257,6 +303,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "archive_word": "📥 В архив",
         "unarchive_word": "↩ Вернуть",
         "remove_word": "Удалить",
+        "subwords_from": "из {parent}",
+        "subwords_count": "{n} слова: {words}",
         "lbl_original": "ОРИГИНАЛ",
         "lbl_translated": "ПЕРЕВОД",
         "ai_tools_header": "ИНСТРУМЕНТЫ ИИ И БКРС",
@@ -279,6 +327,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "lbl_theme": "Тема оформления",
         "lbl_app_lang": "Язык интерфейса",
         "lbl_font": "Шрифт текста",
+        "lbl_font_size": "Размер текста",
         "lbl_trans_source": "Источник перевода",
         "lbl_target_lang": "Язык перевода (Google)",
         "lbl_hotkey": "Горячая клавиша",

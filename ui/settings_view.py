@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from config import (
     AI_PROVIDERS,
     FONT_OPTIONS,
+    FONT_SIZE_OPTIONS,
     HOTKEY_OPTIONS,
     LANGUAGES,
     SAVE_FILE,
@@ -151,11 +152,32 @@ class SettingsView(tk.Frame):
         cb_font.grid(row=2, column=1, sticky="ew", pady=3)
         cb_font.bind("<<ComboboxSelected>>", self._on_setting_changed)
 
-        # Row 3: Translation Source (Google Translate vs BKRS)
+        # Row 3: Text Size
+        self.lbl_font_size = tk.Label(
+            self.gen_card, text="", font=("Segoe UI", 10), fg=t.FG_WORD, bg=t.BG_CARD, anchor="w"
+        )
+        self.lbl_font_size.grid(row=3, column=0, sticky="w", pady=3, padx=(0, 16))
+
+        size_val = self.app.settings.get("font_size", "Medium")
+        if size_val not in FONT_SIZE_OPTIONS:
+            size_val = "Medium"
+        self.var_font_size = tk.StringVar(value=size_val)
+        cb_font_size = ttk.Combobox(
+            self.gen_card,
+            textvariable=self.var_font_size,
+            values=FONT_SIZE_OPTIONS,
+            state="readonly",
+            font=("Segoe UI", 10),
+            style="Modern.TCombobox",
+        )
+        cb_font_size.grid(row=3, column=1, sticky="ew", pady=3)
+        cb_font_size.bind("<<ComboboxSelected>>", self._on_setting_changed)
+
+        # Row 4: Translation Source (Google Translate vs BKRS)
         self.lbl_trans_source = tk.Label(
             self.gen_card, text="", font=("Segoe UI", 10), fg=t.FG_WORD, bg=t.BG_CARD, anchor="w"
         )
-        self.lbl_trans_source.grid(row=3, column=0, sticky="w", pady=3, padx=(0, 16))
+        self.lbl_trans_source.grid(row=4, column=0, sticky="w", pady=3, padx=(0, 16))
 
         source_val = self.app.settings.get("translation_source", "Google Translate")
         if source_val not in TRANSLATION_SOURCES:
@@ -169,14 +191,14 @@ class SettingsView(tk.Frame):
             font=("Segoe UI", 10),
             style="Modern.TCombobox",
         )
-        cb_trans_source.grid(row=3, column=1, sticky="ew", pady=3)
+        cb_trans_source.grid(row=4, column=1, sticky="ew", pady=3)
         cb_trans_source.bind("<<ComboboxSelected>>", self._on_trans_source_changed)
 
-        # Row 4: Target Translation Language (for Google Translate)
+        # Row 5: Target Translation Language (for Google Translate)
         self.lbl_target_lang = tk.Label(
             self.gen_card, text="", font=("Segoe UI", 10), fg=t.FG_WORD, bg=t.BG_CARD, anchor="w"
         )
-        self.lbl_target_lang.grid(row=4, column=0, sticky="w", pady=3, padx=(0, 16))
+        self.lbl_target_lang.grid(row=5, column=0, sticky="w", pady=3, padx=(0, 16))
 
         self.var_target_lang = tk.StringVar(value=self.app.settings.get("target_language", "French"))
         self.cb_target_lang = ttk.Combobox(
@@ -187,15 +209,15 @@ class SettingsView(tk.Frame):
             font=("Segoe UI", 10),
             style="Modern.TCombobox",
         )
-        self.cb_target_lang.grid(row=4, column=1, sticky="ew", pady=3)
+        self.cb_target_lang.grid(row=5, column=1, sticky="ew", pady=3)
         self.cb_target_lang.bind("<<ComboboxSelected>>", self._on_setting_changed)
         self._update_target_lang_state()
 
-        # Row 5: Capture Shortcut
+        # Row 6: Capture Shortcut
         self.lbl_hotkey = tk.Label(
             self.gen_card, text="", font=("Segoe UI", 10), fg=t.FG_WORD, bg=t.BG_CARD, anchor="w"
         )
-        self.lbl_hotkey.grid(row=5, column=0, sticky="w", pady=3, padx=(0, 16))
+        self.lbl_hotkey.grid(row=6, column=0, sticky="w", pady=3, padx=(0, 16))
 
         self.var_hotkey = tk.StringVar(value=self.app.settings.get("hotkey", "Ctrl + Q"))
         cb_hotkey = ttk.Combobox(
@@ -206,17 +228,17 @@ class SettingsView(tk.Frame):
             font=("Segoe UI", 10),
             style="Modern.TCombobox",
         )
-        cb_hotkey.grid(row=5, column=1, sticky="ew", pady=3)
+        cb_hotkey.grid(row=6, column=1, sticky="ew", pady=3)
         cb_hotkey.bind("<<ComboboxSelected>>", self._on_hotkey_changed)
 
-        # Row 6: Words File (.txt) Location
+        # Row 7: Words File (.txt) Location
         self.lbl_save_file = tk.Label(
             self.gen_card, text="", font=("Segoe UI", 10), fg=t.FG_WORD, bg=t.BG_CARD, anchor="w"
         )
-        self.lbl_save_file.grid(row=6, column=0, sticky="w", pady=3, padx=(0, 16))
+        self.lbl_save_file.grid(row=7, column=0, sticky="w", pady=3, padx=(0, 16))
 
         self.save_file_frame = tk.Frame(self.gen_card, bg=t.BG_CARD)
-        self.save_file_frame.grid(row=6, column=1, sticky="ew", pady=3)
+        self.save_file_frame.grid(row=7, column=1, sticky="ew", pady=3)
 
         self.var_save_path = tk.StringVar(
             value=self.app.settings.get("save_file_path", str(SAVE_FILE))
@@ -255,7 +277,7 @@ class SettingsView(tk.Frame):
         )
         self.btn_browse.pack(side=tk.RIGHT, padx=(6, 0))
 
-        # Row 7: Always on top checkbox
+        # Row 8: Always on top checkbox
         self.var_topmost = tk.BooleanVar(value=bool(self.app.settings.get("always_on_top", False)))
         self.chk_topmost = tk.Checkbutton(
             self.gen_card,
@@ -270,7 +292,7 @@ class SettingsView(tk.Frame):
             cursor="hand2",
             command=self._on_setting_changed,
         )
-        self.chk_topmost.grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 2))
+        self.chk_topmost.grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 2))
 
         # --- Section 2: AI Configuration ---
         self.lbl_sec_ai = tk.Label(
@@ -379,6 +401,7 @@ class SettingsView(tk.Frame):
     def sync_vars_from_settings(self) -> None:
         self.var_theme.set(self.app.settings.get("theme", "Dark"))
         self.var_font.set(self.app.settings.get("font_family", "Calibri"))
+        self.var_font_size.set(self.app.settings.get("font_size", "Medium"))
         self.var_save_path.set(self.app.settings.get("save_file_path", str(SAVE_FILE)))
 
     def _browse_save_file(self) -> None:
@@ -434,6 +457,7 @@ class SettingsView(tk.Frame):
                 "theme": self.var_theme.get(),
                 "app_language": self.var_app_lang.get(),
                 "font_family": self.var_font.get(),
+                "font_size": self.var_font_size.get(),
                 "translation_source": self.var_trans_source.get(),
                 "target_language": self.var_target_lang.get(),
                 "hotkey": self.var_hotkey.get(),
@@ -472,6 +496,7 @@ class SettingsView(tk.Frame):
             self.lbl_theme,
             self.lbl_app_lang,
             self.lbl_font,
+            self.lbl_font_size,
             self.lbl_trans_source,
             self.lbl_target_lang,
             self.lbl_hotkey,
@@ -526,6 +551,7 @@ class SettingsView(tk.Frame):
         self.lbl_theme.configure(text=self.app.t("lbl_theme"))
         self.lbl_app_lang.configure(text=self.app.t("lbl_app_lang"))
         self.lbl_font.configure(text=self.app.t("lbl_font"))
+        self.lbl_font_size.configure(text=self.app.t("lbl_font_size"))
         self.lbl_trans_source.configure(text=self.app.t("lbl_trans_source"))
         self.lbl_target_lang.configure(text=self.app.t("lbl_target_lang"))
         self.lbl_hotkey.configure(text=self.app.t("lbl_hotkey"))

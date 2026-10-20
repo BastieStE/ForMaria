@@ -158,7 +158,7 @@ def _extract_bkrs_translation_from_page(page: str) -> str:
             else:
                 parts.append(f"{w_clean}: {meaning}")
         if parts:
-            return "  |  ".join(parts)
+            return "\n".join(parts)
 
     return "(Not found on BKRS)"
 
